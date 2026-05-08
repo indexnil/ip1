@@ -112,6 +112,9 @@ void wifi_begin(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "esp_wifi_start finished");
 
+    // Init protocols
+    arp_init();
+
     esp_wifi_internal_reg_rxcb(ESP_IF_WIFI_STA, wifi_rxcb);
 }
 
