@@ -8,10 +8,10 @@ typedef struct {
 
 typedef struct {
     uint8_t addr[4];
-} ip_addr_t;
+} ipv4_addr_t;
 
 
 struct net_context_t {
     mac_addr_t mac;
-    ip_addr_t ip;
+    ipv4_addr_t ip;
 };

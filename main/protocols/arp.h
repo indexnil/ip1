@@ -19,7 +19,9 @@ struct arp_data_t {
     uint8_t dst_ip[4];
 };
 
-esp_err_t get_mac_addr(ip_addr_t ip, mac_addr_t *out_mac);
+
+esp_err_t arp_get_cached_mac_addr(ipv4_addr_t* ip, mac_addr_t *out_mac);
+esp_err_t arp_get_mac_addr(ipv4_addr_t* ip, mac_addr_t *out_mac);
 
 struct arp_request_t {
     uint8_t ip[4];
@@ -32,7 +34,12 @@ struct arp_pending_t {
     uint8_t waiting_task_count;
 };
 
+struct arp_entry_t {
+    ipv4_addr_t ip;
+    mac_addr_t mac;
+};
+
 void arp_init(void);
 
-void arp_set_local_info(const mac_addr_t *mac, const ip_addr_t *ip);
+void arp_set_local_info(const mac_addr_t *mac, const ipv4_addr_t *ip);
 void arp_input(struct arp_data_t* buffer, uint16_t len);
