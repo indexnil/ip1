@@ -13,6 +13,8 @@
 #include "queue.h"
 
 #define IP_MAC_CACHE_LENGTH 16
+#define ARP_TIMEOUT_TICKS pdMS_TO_TICKS(1*1000)
+#define ARP_TIMEOUT_REFRESH_TICKS pdMS_TO_TICKS(1*1000)
 
 static const char* TAG = "arp";
 
@@ -58,6 +60,7 @@ struct arp_pending_t* alloc_pending(uint8_t ip[4]){
 
     struct arp_pending_t pending = {
         .waiting_task_count = 0,
+        .expiration_tick = xTaskGetTickCount()+ARP_TIMEOUT_TICKS,
     };
 
     memcpy(pending.ip, ip, 4);
@@ -225,7 +228,7 @@ void arp_input(struct arp_data_t* buffer, uint16_t len){
     ipv4_to_readable(readable_src_ip, buffer->src_ip);
 
 
-    ESP_LOGI(TAG, "ARP event received! Source IP: %s Destination IP: %s", readable_src_ip, readable_dst_ip);
+    //ESP_LOGI(TAG, "ARP event received! Source IP: %s Destination IP: %s", readable_src_ip, readable_dst_ip);
 
     if (ntohs(buffer->hardware_type) != 1){
         // discard
@@ -238,13 +241,13 @@ void arp_input(struct arp_data_t* buffer, uint16_t len){
 
     if (memcmp(buffer->dst_ip, self_ip_addr.addr, 4) != 0){
         // discard
-        ESP_LOGI(TAG, "ARP request was not for our ip");
+        //ESP_LOGI(TAG, "ARP request was not for our ip");
         return;
     }
 
     if (ntohs(buffer->operation) == ARP_OP_REPLY){
         // handle receiving a reply
-        ESP_LOGI(TAG, "ARP reply detected for us, from IP: %s", readable_src_ip);
+        //ESP_LOGI(TAG, "ARP reply detected for us, from IP: %s", readable_src_ip);
 
         struct arp_entry_t entry = {};
         memcpy(entry.ip.addr, buffer->src_ip, 4);
@@ -261,7 +264,7 @@ void arp_input(struct arp_data_t* buffer, uint16_t len){
 
     if (ntohs(buffer->operation) == ARP_OP_REQUEST){
         // handle receiving a request
-        ESP_LOGI(TAG, "ARP request detected for us, from IP: %s", readable_src_ip);
+        //ESP_LOGI(TAG, "ARP request detected for us, from IP: %s", readable_src_ip);
         send_arp_reply(buffer->src_mac, buffer->src_ip);
     } 
 }
@@ -271,7 +274,20 @@ void arp_task(){
     struct arp_entry_t entry;
     while (1){
         // Wait for any of the queues to get an entry
-        QueueSetMemberHandle_t handle = xQueueSelectFromSet(arp_queue_set, portMAX_DELAY);
+        QueueSetMemberHandle_t handle = xQueueSelectFromSet(arp_queue_set, ARP_TIMEOUT_REFRESH_TICKS);
+
+        // Clean any timed out pending requests
+        TickType_t current_tick = xTaskGetTickCount();
+        for (uint8_t i = 0; i<MAX_PENDING_IPS; i++){
+            struct arp_pending_t* p = &arp_pending_tasks[i];
+            if (current_tick >= p->expiration_tick){
+                for (uint8_t i = 0; i < p->waiting_task_count; i++){
+                    xTaskNotifyGive(p->waiting_tasks[i]);
+                }
+
+                free_pending(p);
+            }
+        }
 
         if (handle == arp_request_queue){
             if (xQueueReceive(arp_request_queue, &request, 0) == pdPASS){
@@ -307,6 +323,7 @@ void arp_task(){
                 add_ip_mac_cache_entry(&entry);
             }
         }
+
     }
 }
 
@@ -358,9 +375,9 @@ esp_err_t arp_get_mac_addr(ipv4_addr_t* ip, mac_addr_t *out_mac){
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     
     esp_err_t result = arp_get_cached_mac_addr(ip, out_mac);
-    if (result != ESP_OK){
-        ESP_LOGW(TAG, "Error getting mac address. ARP request resolved without a MAC.");
-    }
+    //if (result != ESP_OK){
+    //    ESP_LOGW(TAG, "Error getting mac address. ARP request resolved without a MAC.");
+    //}
 
     return result;
 }

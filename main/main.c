@@ -57,7 +57,7 @@ int wifi_rxcb(void* buffer, uint16_t len, void* eb){
     char readable_dst_mac[12+5+1];
     mac_to_readable(readable_dst_mac, eth_hdr->dst_mac);
 
-    ESP_LOGI(TAG, "Wifi event recieved! Source MAC: %s Destination MAC: %s Ethertype: %x", readable_src_mac, readable_dst_mac, ntohs(eth_hdr->ethertype));
+    //ESP_LOGI(TAG, "Wifi event recieved! Source MAC: %s Destination MAC: %s Ethertype: %x", readable_src_mac, readable_dst_mac, ntohs(eth_hdr->ethertype));
     
     // remove the ethernet 2 header before sending it to the upper protocols
     void* buffer_data = buffer + 14;
@@ -264,10 +264,10 @@ void wifi_begin(void)
 
     esp_wifi_internal_reg_rxcb(ESP_IF_WIFI_STA, wifi_rxcb);
 
-    if (xTaskCreate(wifi_rx_heartbeat_task, "wifi rx heartbeat", 1024, NULL, 1, NULL) != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create wifi_rx_heartbeat_task");
-        return;
-    }
+    //if (xTaskCreate(wifi_rx_heartbeat_task, "wifi rx heartbeat", 1024, NULL, 1, NULL) != pdPASS) {
+    //    ESP_LOGE(TAG, "Failed to create wifi_rx_heartbeat_task");
+    //    return;
+    //}
 }
 
 void app_main()

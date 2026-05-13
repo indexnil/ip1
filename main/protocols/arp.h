@@ -29,8 +29,9 @@ struct arp_request_t {
 };
 
 struct arp_pending_t {
-    uint8_t ip[4];
+    TickType_t expiration_tick;
     TaskHandle_t waiting_tasks[MAX_PENDING_PER_IP];
+    uint8_t ip[4];
     uint8_t waiting_task_count;
 };
 
