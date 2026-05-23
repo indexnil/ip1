@@ -79,9 +79,9 @@ void add_ip_mac_cache_entry(struct arp_entry_t* entry){
     // First check for duplicates
     uint8_t is_duplicate_found = 0;
     for (int i = 0; i<=IP_MAC_CACHE_LENGTH-1; i++){
-        if (memcmp(entry->ip.addr, ip_mac_cache[i], 4) == 0){
+        if (memcmp(entry->ip.bytes, ip_mac_cache[i], 4) == 0){
             // Duplicate found, update it and dont add a whole new entry.
-            memcpy(ip_mac_cache[i]+4, entry->mac.addr, 6);
+            memcpy(ip_mac_cache[i]+4, entry->mac.bytes, 6);
             is_duplicate_found = 1;
             break;
         }
@@ -94,12 +94,12 @@ void add_ip_mac_cache_entry(struct arp_entry_t* entry){
             ip_mac_cache_top = 0; 
             //ESP_LOGW(TAG, "The ip_mac_cache array overflowed and will now overwrite old entries!");
         }
-        memcpy(ip_mac_cache[ip_mac_cache_top], entry->ip.addr, 4);
-        memcpy(ip_mac_cache[ip_mac_cache_top]+4, entry->mac.addr, 6);
+        memcpy(ip_mac_cache[ip_mac_cache_top], entry->ip.bytes, 4);
+        memcpy(ip_mac_cache[ip_mac_cache_top]+4, entry->mac.bytes, 6);
         ip_mac_cache_top = (ip_mac_cache_top + 1)%IP_MAC_CACHE_LENGTH;
     }
 
-    struct arp_pending_t* p = find_pending(entry->ip.addr);
+    struct arp_pending_t* p = find_pending(entry->ip.bytes);
     if (p == NULL){
         return;
     }
@@ -113,8 +113,8 @@ void add_ip_mac_cache_entry(struct arp_entry_t* entry){
 // Returns ESP_OK if found, and ESP_FAIL if its not cached
 esp_err_t arp_get_cached_mac_addr(ipv4_addr_t* ip, mac_addr_t* out_mac){
     for (int i = 0; i<=IP_MAC_CACHE_LENGTH-1; i++){
-        if (memcmp(ip->addr, ip_mac_cache[i], 4) == 0){
-            memcpy(out_mac->addr, ip_mac_cache[i]+4, 6);
+        if (memcmp(ip->bytes, ip_mac_cache[i], 4) == 0){
+            memcpy(out_mac->bytes, ip_mac_cache[i]+4, 6);
             return ESP_OK;
         }
     }
@@ -145,10 +145,10 @@ esp_err_t send_arp_request(uint8_t ip[4]){
     memcpy(p, &operation, 2); p += 2;
     
     /* Sender hardware address (6 bytes) */
-    memcpy(p, self_mac_addr.addr, 6); p += 6;
+    memcpy(p, self_mac_addr.bytes, 6); p += 6;
     
     /* Sender protocol address (4 bytes) */
-    memcpy(p, self_ip_addr.addr, 4); p += 4;
+    memcpy(p, self_ip_addr.bytes, 4); p += 4;
     
     /* Empty target hardware address (6 bytes) */
     p += 6;
@@ -159,7 +159,7 @@ esp_err_t send_arp_request(uint8_t ip[4]){
     uint16_t arp_request_len = p - arp_request_buf;
     
     /* Transmit via Ethernet layer */
-    esp_err_t result = eth_tx(BROADCAST_MAC, self_mac_addr.addr, htons(ARP_ETHERTYPE), 
+    esp_err_t result = eth_tx(BROADCAST_MAC, self_mac_addr.bytes, htons(ARP_ETHERTYPE), 
                               arp_request_buf, arp_request_len);
     //if (result != ESP_OK) {
     //    ESP_LOGI(TAG, "Failed to send ARP request");
@@ -169,8 +169,8 @@ esp_err_t send_arp_request(uint8_t ip[4]){
 }
 
 void arp_set_local_info(const mac_addr_t *mac, const ipv4_addr_t *ip){
-    memcpy(self_ip_addr.addr, ip->addr, 4);
-    memcpy(self_mac_addr.addr, mac->addr, 6);
+    memcpy(self_ip_addr.bytes, ip->bytes, 4);
+    memcpy(self_mac_addr.bytes, mac->bytes, 6);
 }
 
 esp_err_t send_arp_reply(uint8_t mac_addr[6], uint8_t ip_addr[4]){
@@ -197,10 +197,10 @@ esp_err_t send_arp_reply(uint8_t mac_addr[6], uint8_t ip_addr[4]){
     memcpy(p, &operation, 2); p += 2;
     
     /* Sender hardware address (6 bytes) */
-    memcpy(p, self_mac_addr.addr, 6); p += 6;
+    memcpy(p, self_mac_addr.bytes, 6); p += 6;
     
     /* Sender protocol address (4 bytes) */
-    memcpy(p, self_ip_addr.addr, 4); p += 4;
+    memcpy(p, self_ip_addr.bytes, 4); p += 4;
     
     /* Target hardware address (6 bytes) */
     memcpy(p, mac_addr, 6); p += 6;
@@ -211,7 +211,7 @@ esp_err_t send_arp_reply(uint8_t mac_addr[6], uint8_t ip_addr[4]){
     uint16_t arp_reply_len = p - arp_reply_buf;
     
     /* Transmit via Ethernet layer */
-    esp_err_t result = eth_tx(mac_addr, self_mac_addr.addr, htons(ARP_ETHERTYPE), 
+    esp_err_t result = eth_tx(mac_addr, self_mac_addr.bytes, htons(ARP_ETHERTYPE), 
                               arp_reply_buf, arp_reply_len);
     if (result != ESP_OK) {
         ESP_LOGI(TAG, "Failed to send ARP reply");
@@ -239,7 +239,7 @@ void arp_input(struct arp_data_t* buffer, uint16_t len){
         return;
     }
 
-    if (memcmp(buffer->dst_ip, self_ip_addr.addr, 4) != 0){
+    if (memcmp(buffer->dst_ip, self_ip_addr.bytes, 4) != 0){
         // discard
         //ESP_LOGI(TAG, "ARP request was not for our ip");
         return;
@@ -250,8 +250,8 @@ void arp_input(struct arp_data_t* buffer, uint16_t len){
         //ESP_LOGI(TAG, "ARP reply detected for us, from IP: %s", readable_src_ip);
 
         struct arp_entry_t entry = {};
-        memcpy(entry.ip.addr, buffer->src_ip, 4);
-        memcpy(entry.mac.addr, buffer->src_mac, 6);
+        memcpy(entry.ip.bytes, buffer->src_ip, 4);
+        memcpy(entry.mac.bytes, buffer->src_mac, 6);
 
        
         BaseType_t xResult = xQueueSend(arp_input_queue, &entry, 0);
@@ -359,7 +359,7 @@ void arp_init(void){
     BaseType_t xReturned = xTaskCreate(arp_task, "arp task", 800, NULL, 1, NULL);
     if (xReturned  != pdPASS){
         // If not pass, then xReturned is garuanteed by the docs to be a errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY.
-        ESP_LOGE(TAG, "Could not create arp_task. Not enough memory!");
+        ESP_LOGE(TAG, "Could not create arp task. Not enough memory!");
         return;
     }
 }
@@ -368,7 +368,7 @@ esp_err_t arp_get_mac_addr(ipv4_addr_t* ip, mac_addr_t *out_mac){
     struct arp_request_t request = {
         .task = xTaskGetCurrentTaskHandle(),
     };
-    memcpy(request.ip, ip->addr, 4);
+    memcpy(request.ip, ip->bytes, 4);
     // No need for handling errors, since the timeout is infinite it will yield if the queue is full
     xQueueSend(arp_request_queue, &request, portMAX_DELAY);
 

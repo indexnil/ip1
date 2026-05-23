@@ -19,6 +19,8 @@
 #include "utility/endian.h"
 #include "protocols/arp.h"
 #include "protocols/eth.h"
+#include "protocols/ipv4.h"
+#include "protocols/icmpv4.h"
 
 #include "secrets.h"
 #include "arp_scanner.h"
@@ -45,7 +47,7 @@ typedef struct {
 
 static struct net_context_t net_context = {
     .ip = {
-        .addr = {192, 168, 1, 230}
+        .bytes = {192, 168, 1, 230}
     }
 };
 
@@ -67,6 +69,8 @@ int wifi_rxcb(void* buffer, uint16_t len, void* eb){
         case ARP_ETHERTYPE:
             arp_input(buffer_data, buffer_data_len);
             break;
+        case IPV4_ETHERTYPE:
+            ipv4_input(buffer_data, buffer_data_len);
         default: 
             break;
     }
@@ -125,13 +129,11 @@ static void wifi_rx_buffer_free_task(void* arg)
     }
 }
 */
-
+/*
 static void wifi_rx_heartbeat_task(void* arg)
 {
     uint32_t last_count = 0;
     uint32_t last_freed_count = 0;
-    uint32_t last_free_enter_count = 0;
-    uint32_t last_free_exit_count = 0;
     uint32_t last_eb_null_count = 0;
     uint32_t last_eb_non_null_count = 0;
     uint32_t last_free_heap = esp_get_free_heap_size();
@@ -149,13 +151,6 @@ static void wifi_rx_heartbeat_task(void* arg)
 
         int32_t rx_diff = current_count-last_count;
         int32_t heap_diff = current_free_heap-last_free_heap;
-        /*
-                FREE_IN: total=%lu delta=%lu | FREE_OUT: total=%lu delta=%lu |
-                 (unsigned long)current_free_enter,
-                 (unsigned long)(current_free_enter - last_free_enter_count),
-                 (unsigned long)current_free_exit,
-                 (unsigned long)(current_free_exit - last_free_exit_count),
-        */
         ESP_LOGI(TAG, "RX: total=%lu delta=%d | FREED: total=%lu delta=%lu | queued=%lu | qfail=%lu | EB NULL: total=%lu delta=%lu | EB NONNULL: total=%lu delta=%lu | FREE HEAP: total=%lu delta=%d delta/packet %d",
                  (unsigned long)current_count,
                  (int32_t)(rx_diff),
@@ -172,14 +167,13 @@ static void wifi_rx_heartbeat_task(void* arg)
                  (int32_t)((rx_diff == 0) ? 0 : (heap_diff/rx_diff))
         );
         last_count = current_count;
-        last_free_enter_count = current_free_enter;
-        last_free_exit_count = current_free_exit;
         last_freed_count = current_freed;
         last_eb_null_count = current_eb_null;
         last_eb_non_null_count = current_eb_non_null;
         last_free_heap = current_free_heap;
     }
 }
+*/
 
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
@@ -219,10 +213,12 @@ void wifi_begin(void)
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
     // MAC: 30:83:98:94:ec:1b
-    ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, net_context.mac.addr));
+    ESP_ERROR_CHECK(esp_wifi_get_mac(ESP_IF_WIFI_STA, net_context.mac.bytes));
 
     // No DHCP so once we have the MAC we can tell everyone what they need
     arp_set_local_info(&net_context.mac, &net_context.ip);
+    ipv4_set_self_net_context(&net_context);
+    icmpv4_set_self_net_context(&net_context);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
@@ -246,6 +242,7 @@ void wifi_begin(void)
 
     // Init protocols
     arp_init();
+    ipv4_init();
 
     // Create queue for deferred RX buffer freeing
     rx_buffer_free_queue = xQueueCreate(16, sizeof(wifi_rx_free_item_t));
@@ -277,5 +274,5 @@ void app_main()
     wifi_begin();
 
     /* Initialize optional components */
-    arp_scanner_init();
+    //arp_scanner_init();
 }

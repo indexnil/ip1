@@ -9,18 +9,18 @@ static const char TAG[] = "arp_scanner";
 
 static void begin_scan(){
     for (uint8_t i = 1; i<255; i++){
-        ipv4_addr_t ip = {.addr = {(uint8_t)192,(uint8_t)168,(uint8_t)1,i}};
+        ipv4_addr_t ip = {.bytes = {(uint8_t)192,(uint8_t)168,(uint8_t)50,i}};
         mac_addr_t mac;
         esp_err_t result = arp_get_mac_addr(&ip, &mac);
 
         char readable_ip[sizeof("ddd.ddd.ddd.ddd")];
-        ipv4_to_readable(readable_ip, ip.addr);
+        ipv4_to_readable(readable_ip, ip.bytes);
 
         if (result != ESP_OK){
             ESP_LOGI(TAG, "No mac found for ip: %s", readable_ip);
         } else {
             char readable_mac[sizeof("ff:ff:ff:ff:ff:ff")];
-            mac_to_readable(readable_mac, mac.addr);
+            mac_to_readable(readable_mac, mac.bytes);
 
             ESP_LOGI(TAG, "Found ip: %s with mac: %s", readable_ip, readable_mac);
         }
