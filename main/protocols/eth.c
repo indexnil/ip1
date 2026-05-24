@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 #include "esp_err.h"
 #include "../utility/wifi_tx.h"
 
@@ -8,7 +9,10 @@ esp_err_t eth_tx(const uint8_t dst_mac[6], const uint8_t src_mac[6], uint16_t et
                  const void *payload, uint16_t payload_len){
 
     uint16_t eth_frame_len = 14 + payload_len;
-    uint8_t eth_frame[eth_frame_len];
+    uint8_t *eth_frame = malloc(eth_frame_len);
+    if (eth_frame == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
     
     uint8_t* p = eth_frame;
     memcpy(p, dst_mac, 6); p+=6;
@@ -16,5 +20,7 @@ esp_err_t eth_tx(const uint8_t dst_mac[6], const uint8_t src_mac[6], uint16_t et
     memcpy(p, &ethertype, 2); p+=2;
     memcpy(p, payload, payload_len); p+=payload_len;
 
-    return wifi_tx_raw((void *)eth_frame, eth_frame_len);
+    esp_err_t result = wifi_tx_raw((void *)eth_frame, eth_frame_len);
+    free(eth_frame);
+    return result;
 }

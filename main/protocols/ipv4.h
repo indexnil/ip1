@@ -11,6 +11,19 @@ struct ipv4_transmit_params_t {
     uint16_t data_len;
 };
 
+struct ipv4_header_t {
+    uint8_t version_and_ihl;
+    uint8_t dscp_and_ecn;
+    uint16_t total_length;
+    uint16_t identification;
+    uint16_t flags_and_fragment_offset;
+    uint8_t ttl;
+    uint8_t protocol;
+    uint16_t header_checksum;
+    uint8_t src_ipv4_addr[4];
+    uint8_t dst_ipv4_addr[4];
+} __attribute__((packed));
+
 void ipv4_to_readable(char* buffer, const uint8_t address[4]);
 
 void ipv4_set_self_net_context(const struct net_context_t *net);
@@ -18,6 +31,6 @@ void ipv4_init();
 
 void ipv4_input(uint8_t* buffer, uint16_t buffer_len);
 
-uint16_t ipv4_checksum(const uint8_t *header, uint8_t header_len_words);
+uint16_t ipv4_checksum(const uint8_t *header, uint16_t header_len_bytes);
 
 esp_err_t send_ipv4_packet(struct ipv4_transmit_params_t* params);

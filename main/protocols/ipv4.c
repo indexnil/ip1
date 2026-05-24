@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "FreeRTOS.h"
+#include "task.h"
 #include "queue.h"
 #include "ipv4.h"
 #include "eth.h"
@@ -14,30 +15,24 @@
 #define HEADER_LENGTH 20
 #define TAG "ipv4"
 
-struct ipv4_header_t {
-    uint8_t version_and_ihl;
-    uint8_t dscp_and_ecn;
-    uint16_t total_length;
-    uint16_t identification;
-    uint16_t flags_and_fragment_offset;
-    uint8_t ttl;
-    uint8_t protocol;
-    uint16_t header_checksum;
-    uint8_t src_ipv4_addr[4];
-    uint8_t dst_ipv4_addr[4];
-} __attribute__((packed));
-
 struct net_context_t self_net;
 
 QueueHandle_t ipv4_transmit_queue = NULL;
 
-// Header length in half words
-uint16_t ipv4_checksum(const uint8_t *header, uint8_t header_len_words){
+// Compute the standard internet checksum over a byte buffer.
+uint16_t ipv4_checksum(const uint8_t *header, uint16_t header_len_bytes){
     uint32_t sum = 0;
-    
-    for (uint8_t i = 0; i < header_len_words; i++){
+
+    uint16_t word_count = header_len_bytes / 2;
+    for (uint16_t i = 0; i < word_count; i++){
         uint16_t word = 0;
         memcpy(&word, header + (i * 2), sizeof(word));
+        sum += ntohs(word);
+    }
+
+    if ((header_len_bytes & 1) != 0){
+        uint16_t word = 0;
+        memcpy(&word, header + (word_count * 2), 1);
         sum += ntohs(word);
     }
 
@@ -74,7 +69,12 @@ esp_err_t send_ipv4_packet(struct ipv4_transmit_params_t* params){
 }
 
 esp_err_t internal_send_ipv4_packet(struct ipv4_transmit_params_t* params){
-    uint8_t packet_buf[HEADER_LENGTH+params->data_len];
+    uint16_t packet_len = HEADER_LENGTH + params->data_len;
+    uint8_t* packet_buf = malloc(packet_len);
+    if (packet_buf == NULL){
+        free(params->data);
+        return ESP_ERR_NO_MEM;
+    }
     uint8_t* p = packet_buf;
 
     // Version and header length
@@ -116,7 +116,7 @@ esp_err_t internal_send_ipv4_packet(struct ipv4_transmit_params_t* params){
     p+=4;
 
     // Go back and set header checksum
-    uint16_t checksum = htons(ipv4_checksum(packet_buf, HEADER_LENGTH/2));
+    uint16_t checksum = htons(ipv4_checksum(packet_buf, HEADER_LENGTH));
     memcpy(p-10, &checksum, 2);
 
     // Copy data into packet
@@ -129,10 +129,13 @@ esp_err_t internal_send_ipv4_packet(struct ipv4_transmit_params_t* params){
     if (result != ESP_OK){
         // Warn here so we can see a more detailed reason why it failed.
         ESP_LOGW(TAG,"Failed to get mac address via ARP when sending a packet");
+        free(packet_buf);
         return result;
     }
-    ESP_LOGI(TAG, "Arp complete, Sending actual ipv4 packet now!");
-    return eth_tx(dst_mac_addr.bytes, self_net.mac.bytes, htons(IPV4_ETHERTYPE), packet_buf, HEADER_LENGTH+params->data_len);
+    ESP_LOGI(TAG, "Sending ipv4 packet of %d bytes to data layer", HEADER_LENGTH+params->data_len);
+    result = eth_tx(dst_mac_addr.bytes, self_net.mac.bytes, htons(IPV4_ETHERTYPE), packet_buf, packet_len);
+    free(packet_buf);
+    return result;
 }
 
 void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
@@ -141,7 +144,7 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
     }
 
     struct ipv4_header_t header;
-    memcpy(&header, buffer, sizeof(header));
+    memcpy(&header, buffer, sizeof(struct ipv4_header_t));
 
     uint8_t version = header.version_and_ihl >> 4;
     if (version != 4){
@@ -157,13 +160,13 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
     }
 
     uint16_t total_len = ntohs(header.total_length);
-    if (total_len != buffer_len){
-        // Something went wrong
-        //ESP_LOGI(TAG, "Invalid packet length");
-        //return;
+    if (total_len > buffer_len){
+        // Buffer len includes ethernet padding, so long as we are under that we are fine
+        ESP_LOGI(TAG, "Packet has invalid length field. Total length field says %d but esp says %d", total_len, buffer_len);
+        return;
     }
 
-    if (ipv4_checksum(buffer, IHL*2) != 0){
+    if (ipv4_checksum(buffer, IHL*4) != 0){
         // Malformed header
         ESP_LOGI(TAG, "Invalid packet checksum");
         return;
@@ -178,13 +181,12 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
         return;
     }
 
-    ipv4_addr_t src_ipv4_addr = {};
-    memcpy(src_ipv4_addr.bytes, header.src_ipv4_addr, 4);
-
     switch (protocol)
     {
         case ICMP_PROTOCOL_NUMBER:
-            icmpv4_input(src_ipv4_addr, buffer + (IHL * 4), total_len - (IHL * 4));
+            //icmpv4_input(src_ipv4_addr, buffer + (IHL * 4), total_len - (IHL * 4));
+            // icmpv4 is special because it relies on the ipv4 packet header fields as well
+            icmpv4_input(buffer, total_len);
             break;
         default:
             break;
@@ -196,6 +198,7 @@ void ipv4_task(){
     while (1){
         BaseType_t result = xQueueReceive(ipv4_transmit_queue, &params, portMAX_DELAY);
         if (result == pdTRUE){
+            ESP_LOGI(TAG, "TX task stack high water mark: %u", (unsigned) uxTaskGetStackHighWaterMark(NULL));
             //ESP_LOGI(TAG,"Sending ipv4 packet!");
             internal_send_ipv4_packet(&params);
         }
@@ -211,7 +214,7 @@ void ipv4_init(){
         }
     }
 
-    BaseType_t xReturned = xTaskCreate(ipv4_task, "ipv4 task", 3000, NULL, 1, NULL);
+    BaseType_t xReturned = xTaskCreate(ipv4_task, "ipv4 task", 1500, NULL, 1, NULL);
     if (xReturned  != pdPASS){
         // If not pass, then xReturned is garuanteed by the docs to be a errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY.
         ESP_LOGE(TAG, "Could not create ipv4 task. Not enough memory!");
