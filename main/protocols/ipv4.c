@@ -6,11 +6,13 @@
 #include "ipv4.h"
 #include "eth.h"
 #include "arp.h"
+#include "tcp.h"
 #include "icmpv4.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "../utility/endian.h"
 #include "../utility/net_types.h"
+#include "../utility/checksum.h"
 
 #define HEADER_LENGTH 20
 #define TAG "ipv4"
@@ -18,34 +20,6 @@
 struct net_context_t self_net;
 
 QueueHandle_t ipv4_transmit_queue = NULL;
-
-// Compute the standard internet checksum over a byte buffer.
-uint16_t ipv4_checksum(const uint8_t *header, uint16_t header_len_bytes){
-    uint32_t sum = 0;
-
-    uint16_t word_count = header_len_bytes / 2;
-    for (uint16_t i = 0; i < word_count; i++){
-        uint16_t word = 0;
-        memcpy(&word, header + (i * 2), sizeof(word));
-        sum += ntohs(word);
-    }
-
-    if ((header_len_bytes & 1) != 0){
-        uint16_t word = 0;
-        memcpy(&word, header + (word_count * 2), 1);
-        sum += ntohs(word);
-    }
-
-    // Fold the 32 bit sum into 16 bits
-    uint16_t upper = sum >> 16;
-    while (upper != 0){
-        sum = sum & 0xFFFF;
-        sum = sum + (upper);
-        upper = sum >> 16;
-    }
-
-    return ~sum;
-}
 
 void ipv4_set_self_net_context(const struct net_context_t *net){
     memcpy(&self_net, net, sizeof(struct net_context_t));
@@ -116,7 +90,7 @@ esp_err_t internal_send_ipv4_packet(struct ipv4_transmit_params_t* params){
     p+=4;
 
     // Go back and set header checksum
-    uint16_t checksum = htons(ipv4_checksum(packet_buf, HEADER_LENGTH));
+    uint16_t checksum = htons(net_checksum(packet_buf, HEADER_LENGTH));
     memcpy(p-10, &checksum, 2);
 
     // Copy data into packet
@@ -151,13 +125,16 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
         ESP_LOGI(TAG, "Invalid packet version");
         return;
     }
-    uint8_t IHL = header.version_and_ihl & 0x0F;
 
-    if (IHL != 5) {
+    uint8_t IHL = header.version_and_ihl & 0x0F; // in words
+    uint16_t header_len = IHL*4; // convert to bytes
+
+    if (header_len != sizeof(struct ipv4_header_t)) {
         // Dont accept any packets with options or malformed ones
         ESP_LOGI(TAG, "Invalid packet header length");
         return;
     }
+
 
     uint16_t total_len = ntohs(header.total_length);
     if (total_len > buffer_len){
@@ -166,7 +143,7 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
         return;
     }
 
-    if (ipv4_checksum(buffer, IHL*4) != 0){
+    if (net_checksum(buffer, IHL*4) != 0){
         // Malformed header
         ESP_LOGI(TAG, "Invalid packet checksum");
         return;
@@ -181,12 +158,19 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
         return;
     }
 
+    uint16_t data_len = total_len-header_len;
+
+    ipv4_addr_t* src_ipv4_addr = (ipv4_addr_t*)header.src_ipv4_addr;
+
     switch (protocol)
     {
         case ICMP_PROTOCOL_NUMBER:
             //icmpv4_input(src_ipv4_addr, buffer + (IHL * 4), total_len - (IHL * 4));
             // icmpv4 is special because it relies on the ipv4 packet header fields as well
             icmpv4_input(buffer, total_len);
+            break;
+        case TCP_PROTOCOL_NUMBER:
+            input_tcp(buffer+header_len, data_len, src_ipv4_addr);
             break;
         default:
             break;
@@ -220,4 +204,6 @@ void ipv4_init(){
         ESP_LOGE(TAG, "Could not create ipv4 task. Not enough memory!");
         return;
     }
+
+    init_tcp();
 }

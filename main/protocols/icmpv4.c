@@ -7,6 +7,7 @@
 #include "esp_err.h"
 #include "icmpv4.h"
 #include "ipv4.h"
+#include "checksum.h"
 #include "../utility/net_types.h"
 #include "../utility/endian.h"
 
@@ -44,7 +45,7 @@ esp_err_t send_icmpv4_ping_reply(ipv4_addr_t dst_ipv4_addr, uint16_t id, uint16_
 
     memcpy(icmpv4_packet+sizeof(struct icmpv4_header_t), data, data_len);
 
-    header->checksum = htons(ipv4_checksum(icmpv4_packet, sizeof(struct icmpv4_header_t) + data_len));
+    header->checksum = htons(net_checksum(icmpv4_packet, sizeof(struct icmpv4_header_t) + data_len));
 
     struct ipv4_transmit_params_t params = {
         .src_ipv4_addr = self_net.ip,

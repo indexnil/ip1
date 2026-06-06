@@ -24,6 +24,7 @@
 
 #include "secrets.h"
 #include "arp_scanner.h"
+#include "tcp_test.h"
 
 #define ESP_WIFI_SSID CONFIG_ESP_WIFI_SSID
 #define ESP_WIFI_PASSWORD CONFIG_ESP_WIFI_PASSWORD
@@ -243,6 +244,7 @@ void wifi_begin(void)
     // Init protocols
     arp_init();
     ipv4_init();
+    
 
     // Create queue for deferred RX buffer freeing
     rx_buffer_free_queue = xQueueCreate(16, sizeof(wifi_rx_free_item_t));
@@ -274,5 +276,5 @@ void app_main()
     wifi_begin();
 
     /* Initialize optional components */
-    //arp_scanner_init();
+    tcp_test_init();
 }
