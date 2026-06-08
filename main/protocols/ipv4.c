@@ -106,7 +106,7 @@ esp_err_t internal_send_ipv4_packet(struct ipv4_transmit_params_t* params){
         free(packet_buf);
         return result;
     }
-    ESP_LOGI(TAG, "Sending ipv4 packet of %d bytes to data layer", HEADER_LENGTH+params->data_len);
+    //ESP_LOGI(TAG, "Sending ipv4 packet of %d bytes to data layer", HEADER_LENGTH+params->data_len);
     result = eth_tx(dst_mac_addr.bytes, self_net.mac.bytes, htons(IPV4_ETHERTYPE), packet_buf, packet_len);
     free(packet_buf);
     return result;
@@ -129,13 +129,6 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
     uint8_t IHL = header.version_and_ihl & 0x0F; // in words
     uint16_t header_len = IHL*4; // convert to bytes
 
-    if (header_len != sizeof(struct ipv4_header_t)) {
-        // Dont accept any packets with options or malformed ones
-        ESP_LOGI(TAG, "Invalid packet header length");
-        return;
-    }
-
-
     uint16_t total_len = ntohs(header.total_length);
     if (total_len > buffer_len){
         // Buffer len includes ethernet padding, so long as we are under that we are fine
@@ -155,6 +148,13 @@ void ipv4_input(uint8_t* buffer, uint16_t buffer_len){
 
     if (memcmp(header.dst_ipv4_addr, self_net.ip.bytes, sizeof(header.dst_ipv4_addr)) != 0){
         //ESP_LOGI(TAG, "Packet not destined for us");
+        return;
+    }
+
+    
+    if (header_len != sizeof(struct ipv4_header_t)) {
+        // Dont accept any packets with options or malformed ones
+        ESP_LOGI(TAG, "Invalid packet header length");
         return;
     }
 
@@ -182,7 +182,7 @@ void ipv4_task(){
     while (1){
         BaseType_t result = xQueueReceive(ipv4_transmit_queue, &params, portMAX_DELAY);
         if (result == pdTRUE){
-            ESP_LOGI(TAG, "TX task stack high water mark: %u", (unsigned) uxTaskGetStackHighWaterMark(NULL));
+            //ESP_LOGI(TAG, "TX task stack high water mark: %u", (unsigned) uxTaskGetStackHighWaterMark(NULL));
             //ESP_LOGI(TAG,"Sending ipv4 packet!");
             internal_send_ipv4_packet(&params);
         }

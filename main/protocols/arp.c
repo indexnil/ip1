@@ -356,7 +356,7 @@ void arp_init(void){
         }
     }
 
-    BaseType_t xReturned = xTaskCreate(arp_task, "arp task", 800, NULL, 1, NULL);
+    BaseType_t xReturned = xTaskCreate(arp_task, "arp task", 1600, NULL, 1, NULL);
     if (xReturned  != pdPASS){
         // If not pass, then xReturned is garuanteed by the docs to be a errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY.
         ESP_LOGE(TAG, "Could not create arp task. Not enough memory!");
