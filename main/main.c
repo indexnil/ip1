@@ -25,6 +25,7 @@
 #include "secrets.h"
 #include "arp_scanner.h"
 #include "tcp_test.h"
+#include "task_monitor.h"
 
 #define ESP_WIFI_SSID CONFIG_ESP_WIFI_SSID
 #define ESP_WIFI_PASSWORD CONFIG_ESP_WIFI_PASSWORD
@@ -206,7 +207,7 @@ void wifi_begin(void)
     esp_wifi_set_rx_pbuf_mem_type(WIFI_RX_PBUF_DRAM);
 
     ESP_ERROR_CHECK(esp_wifi_init_internal(&cfg));
-    ESP_LOGI(TAG, "esp_wifi_init_internal finished");
+    //ESP_LOGI(TAG, "esp_wifi_init_internal finished");
 
     ESP_ERROR_CHECK(esp_supplicant_init());
 
@@ -237,9 +238,9 @@ void wifi_begin(void)
 
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
 
-    ESP_LOGI(TAG, "Starting wifi... ");
+    //ESP_LOGI(TAG, "Starting wifi... ");
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "esp_wifi_start finished");
+    ESP_LOGI(TAG, "Wifi initialised!");
 
     // Init protocols
     arp_init();
@@ -276,5 +277,6 @@ void app_main()
     wifi_begin();
 
     /* Initialize optional components */
-    tcp_test_init();
+    static const char *const watched[] = {"tcp task", "arp task", "ipv4 task", NULL };
+    task_monitor_init(watched);
 }
