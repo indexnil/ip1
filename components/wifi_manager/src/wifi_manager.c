@@ -23,9 +23,9 @@
 #include "protocols/icmpv4.h"
 
 #include "secrets.h"
-#include "arp_scanner.h"
-#include "tcp_test.h"
-#include "task_monitor.h"
+//#include "arp_scanner.h"
+//#include "tcp_test.h"
+//#include "task_monitor.h"
 
 #define ESP_WIFI_SSID CONFIG_ESP_WIFI_SSID
 #define ESP_WIFI_PASSWORD CONFIG_ESP_WIFI_PASSWORD
@@ -197,6 +197,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 void wifi_begin(void)
 {
     ESP_LOGI(TAG, "Initialising wifi...");
+
+    ESP_ERROR_CHECK(nvs_flash_init());
+
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -270,13 +273,13 @@ void wifi_begin(void)
     //}
 }
 
+/*
 void app_main()
 {
-    ESP_ERROR_CHECK(nvs_flash_init());
-
     wifi_begin();
 
-    /* Initialize optional components */
+    // Initialize optional components 
     static const char *const watched[] = {"tcp task", "arp task", "ipv4 task", NULL };
     task_monitor_init(watched);
 }
+*/

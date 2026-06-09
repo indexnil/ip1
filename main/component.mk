@@ -1,2 +1,2 @@
-COMPONENT_SRCDIRS := . protocols utility
-COMPONENT_ADD_INCLUDEDIRS := . protocols utility
+COMPONENT_SRCDIRS := .
+COMPONENT_ADD_INCLUDEDIRS := .
